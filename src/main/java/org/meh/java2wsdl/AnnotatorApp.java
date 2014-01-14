@@ -167,9 +167,9 @@ public class AnnotatorApp {
   }
 
   /**
-   * Create a new run attempting to annotate and munge classes and interfaces
-   * as necessary.
-   * 
+   * Create a new run attempting to annotate and munge classes and interfaces as
+   * necessary.
+   *
    * @param baseDir base directory at the root package level where all the
    * sources reside.
    * @param interfaceDirs Directories of interfaces.
@@ -177,15 +177,23 @@ public class AnnotatorApp {
    * kept.
    * @param suffix the suffix for implementation classes; may be null if there
    * is no suffix.
-   * @param xmlTypePrefixes Prefixes to apply to all named xml types;
-   * to add prefixes to created class names for ease of use
+   * @param xmlTypePrefixes Prefixes to apply to all named xml types; to add
+   * prefixes to created class names for ease of use
    * @param suffixed suffix or prefix?
    */
   public AnnotatorApp(File baseDir, String interfaceDirs, String implDirs,
           String suffix, String xmlTypes, String subIfs,
           boolean suffixed) throws IOException {
 
-    String[] ifs = subIfs.split(";");
+    System.out.println(subIfs);
+    String[] ifs = new String[]{};
+    if (subIfs != null) {
+      ifs = new String[]{subIfs};
+      if (subIfs.contains(";")) {
+        ifs = subIfs.split(";");
+      }
+    }
+
     for (String intf : ifs) {
       String[] split = intf.split(":");
       String name = split[0];
@@ -222,7 +230,7 @@ public class AnnotatorApp {
 
   /**
    * Run it - trawl all classes and interfaces marking up appropriately.
-   * 
+   *
    * @return execution status; 0 for success, any other result is a failure.
    */
   public int execute() throws IOException {
@@ -272,8 +280,6 @@ public class AnnotatorApp {
             modified = true;
             builder = new StringBuilder(builder.toString().replace(pattern, annotation + " get"));
           }
-          // OK, the first occurrence will be followed by two more occurrences we need to cater for:
-//          this.writeFileData(fileInterface, builder.toString());
         }
         String replace = "org.apache.xmlbeans.impl.values.XmlAnySimpleTypeImpl target = null;";
         pattern = "org.apache.xmlbeans.XmlAnySimpleType target = null;";
@@ -283,8 +289,6 @@ public class AnnotatorApp {
             modified = true;
             builder = new StringBuilder(builder.toString().replace(pattern, replace));
           }
-          // OK, the first occurrence will be followed by two more occurrences we need to cater for:
-//          this.writeFileData(fileInterface, builder.toString());
         }
         replace = "target = (org.apache.xmlbeans.impl.values.XmlAnySimpleTypeImpl)get_store()";
         pattern = "target = (org.apache.xmlbeans.XmlAnySimpleType)get_store()";
@@ -294,8 +298,6 @@ public class AnnotatorApp {
             modified = true;
             builder = new StringBuilder(builder.toString().replace(pattern, replace));
           }
-          // OK, the first occurrence will be followed by two more occurrences we need to cater for:
-//          this.writeFileData(fileInterface, builder.toString());
         }
         if (modified) {
           this.writeFileData(classFile, builder.toString());
@@ -339,9 +341,9 @@ public class AnnotatorApp {
 
   /**
    * Change all instances of interface XmlAnySimpleType to it's implementation.
-   * 
+   *
    * Not a clean solution.
-   * 
+   *
    * @param file the file to modify.
    * @param builder contents of the file to perform replacements on.
    * @throws IOException if the file could not be read or does not exist.
@@ -362,199 +364,198 @@ public class AnnotatorApp {
     }
     return builder;
   }
-  
+
   /**
    * Add necessary annotations to the interface. This involves:
-   * 
-   * - adding necessary 
-   * - creation of an XML Adapter helper class;
-   * - adding annotations to all inner classes and enums;
-   * - modification of XmlAnySimpleType get/add methods to use concrete
-   * implementations
-   * 
+   *
+   * - adding necessary - creation of an XML Adapter helper class; - adding
+   * annotations to all inner classes and enums; - modification of
+   * XmlAnySimpleType get/add methods to use concrete implementations
+   *
    * @param fileInterface the file to modify.
    * @param dirIface the directory where the file is located.
    * @param packageName the name of the package where the interface resides.
-   * @param packageNameImpl the name of the package where the implementing
-   * class resides.
+   * @param packageNameImpl the name of the package where the implementing class
+   * resides.
    * @throws IOException if the file could not be read or does not exist.
    */
   private void annotateInterface(File fileInterface, File dirIface,
           String packageName, String packageNameImpl) throws IOException {
-    
-        BufferedReader reader = new BufferedReader(new FileReader(fileInterface));
-        StringBuilder builder = new StringBuilder();
-        int read = -1;
-        while ((read = reader.read()) != -1) {
-          builder.append((char) read);
-        }
-        String fileName = FilenameUtils.removeExtension(fileInterface.getName());
-        // check that file is interface
-        int startIfacePos = builder.indexOf("public interface " + fileName);
-        if (startIfacePos < 0) {
-          System.out.println("[*] ignoring non-interface "
-                  + fileInterface.getName() + ", " + fileName);
-          return;
-        }
-        String implFilename = fileName + this.extension + ".java";
-        String abstractFilename = "XmlAdapter" + implFilename;
-        if (!this.suffixed) {
-          abstractFilename = "XmlAdapter" + this.extension + fileName;
-          implFilename = this.extension + fileName + ".java";
-        }
-        /* Here, the XmlJavaTypeAdapter is an auto-generated class (by this
-         * process) that references a marshalling class to bind the interface
-         * to a concrete implementation; we also give a (hopefully unique) name
-         * via the XmlType annotation: */
-        String data = "\nimport javax.xml.bind.annotation.XmlType;\n"
-                + "import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;\n\n"
-                + "@XmlJavaTypeAdapter("
-                + FilenameUtils.removeExtension(abstractFilename) + ".class)\n"
-                + "@XmlType(name=\""
-                + Character.toLowerCase(fileName.charAt(0))
-                + fileName.substring(1) + "\")";
-        // Xml Any Simple element causes problems - find out if it's in this interface:
-        boolean containsXmlElement = false;
-        String xmlPattern = "org.apache.xmlbeans.XmlAnySimpleType get";
-        if (builder.toString().contains(xmlPattern)) {
-          containsXmlElement = true;
-        }
-        xmlPattern = "org.apache.xmlbeans.XmlAnySimpleType add";
-        if (builder.toString().contains(xmlPattern)) {
-          containsXmlElement = true;
-        }
-        // find out if it's got enums - we need to name each enum differently:
-        boolean containsEnum = false;
-        if (builder.toString().contains("static final class Enum extends org.apache.xmlbeans.")) {
-          containsEnum = true;
-        }
-        if (builder.toString().contains("@XmlJavaTypeAdapter")) {
-          // ^ dumb check! TODO make more elegant
-          System.out.println(fileName + " already contains relevant annotation.");
-        } else {
-          // need to add some imports:
-          if (containsEnum) {
-            data = "\nimport javax.xml.bind.annotation.XmlType;\n" + data;
-          }
-          if (containsXmlElement) {
-            data = "\nimport javax.xml.bind.annotation.XmlElement;\n" + data;
-          }
-          // Now finally write the new class definition in to the file:
-          String newContents = builder.toString().replace("public interface " + fileName,
-                  data + "\n" + "public interface " + fileName);
-          builder = new StringBuilder(newContents);
-          this.writeFileData(fileInterface, newContents);
-          System.out.println("Updated " + fileInterface.getName() + " with appropriate XML annotations and import statements.");
-        }
-        /* find all enums of StringEnumAbstractBase and add annotations - each
-         * enum in the class needs a unique name; in this case, we create a
-         * prefix and append an index for each enum in the class: */
-        String patternEnum = "static final class Enum extends org.apache.xmlbeans.StringEnumAbstractBase";
-        boolean enums = false;
-        int enumCount = 0;
-        // do a 'blat' replace - all enums have same name at this point (if >1 enums):
-        builder = new StringBuilder(builder.toString().replace(patternEnum,
-                "@XmlType(name=\""
-                + FilenameUtils.removeExtension(fileInterface.getName())
-                + "Enum_IDX" + "\", namespace=\"http://openeyes.org\")\n"
-                + patternEnum));
-        
-        int enumIndex = builder.toString().lastIndexOf("Enum_IDX");
-        // now perform replacements based on index:
-        while (enumIndex > -1) {
-          enums = true;
-          builder = new StringBuilder(builder.replace(enumIndex, enumIndex + "Enum_IDX".length(), "Enum_" + (enumCount++)));
-          enumIndex = builder.toString().lastIndexOf("Enum_IDX", enumIndex - 1);
-        }
-        if (enums) {
-          this.writeFileData(fileInterface, builder.toString());
-        }
-        /* EVERY interface requires an abstract class to bind the interface to
-         * a class for marshalling purposes - create the data based
-         * on the intreface name and the impl - this is the XmlJavaTypeAdapter
-         * reference in the header of the interface:
-         */
-        String abstractFileData = this.formatXmlAdapter(packageName,
-                packageNameImpl, fileName);
-        File abstractFile = new File(dirIface, abstractFilename);
-        if (!abstractFile.exists()) {
-          // create the new abstract file
-          this.writeFileData(abstractFile, abstractFileData);
-          System.out.println("[*] Creation of new file in "
-                  + abstractFile.getAbsolutePath() + " succeeded");
 
-        } else {
-          System.out.println(abstractFilename + " already exists; leaving it.");
-        }
-        /* The interface XmlAnySimpleType for add/get methods barfs:
-         * So we're going to replace all occurrences of the interface
-         * with the concrete implementation:
-         */
-        builder = this.adaptXmlAnySimpleType(fileInterface, builder);
-        // Each interface /might/ have sub-interfaces - let's check to see if there are:
-        StringBuilder copyStr = new StringBuilder(builder);
-        // all sub-interfaces are not newline-based - they'll be indented with spaces:
-        final String str = " public interface ";
-        boolean updated = false;
-        int index = builder.length() - 1;
-        while ((index = copyStr.toString().lastIndexOf(str, index - 1)) > -1
-                && index > startIfacePos) {
-          if (index > -1) {
-            updated = true;
-            int spaceChar = copyStr.toString().indexOf(" ", index
-                    + str.length());
-            String subinterface = copyStr.toString().substring(index
-                    + str.length(), spaceChar);
-            // hack TODO need to get this to work for multiple configurations
-            String prefix = null;
+    BufferedReader reader = new BufferedReader(new FileReader(fileInterface));
+    StringBuilder builder = new StringBuilder();
+    int read = -1;
+    while ((read = reader.read()) != -1) {
+      builder.append((char) read);
+    }
+    String fileName = FilenameUtils.removeExtension(fileInterface.getName());
+    // check that file is interface
+    int startIfacePos = builder.indexOf("public interface " + fileName);
+    if (startIfacePos < 0) {
+      System.out.println("[*] ignoring non-interface "
+              + fileInterface.getName() + ", " + fileName);
+      return;
+    }
+    String implFilename = fileName + this.extension + ".java";
+    String abstractFilename = "XmlAdapter" + implFilename;
+    if (!this.suffixed) {
+      abstractFilename = "XmlAdapter" + this.extension + fileName;
+      implFilename = this.extension + fileName + ".java";
+    }
+    /* Here, the XmlJavaTypeAdapter is an auto-generated class (by this
+     * process) that references a marshalling class to bind the interface
+     * to a concrete implementation; we also give a (hopefully unique) name
+     * via the XmlType annotation: */
+    String data = "\nimport javax.xml.bind.annotation.XmlType;\n"
+            + "import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;\n\n"
+            + "@XmlJavaTypeAdapter("
+            + FilenameUtils.removeExtension(abstractFilename) + ".class)\n"
+            + "@XmlType(name=\""
+            + Character.toLowerCase(fileName.charAt(0))
+            + fileName.substring(1) + "\")";
+    // Xml Any Simple element causes problems - find out if it's in this interface:
+    boolean containsXmlElement = false;
+    String xmlPattern = "org.apache.xmlbeans.XmlAnySimpleType get";
+    if (builder.toString().contains(xmlPattern)) {
+      containsXmlElement = true;
+    }
+    xmlPattern = "org.apache.xmlbeans.XmlAnySimpleType add";
+    if (builder.toString().contains(xmlPattern)) {
+      containsXmlElement = true;
+    }
+    // find out if it's got enums - we need to name each enum differently:
+    boolean containsEnum = false;
+    if (builder.toString().contains("static final class Enum extends org.apache.xmlbeans.")) {
+      containsEnum = true;
+    }
+    if (builder.toString().contains("@XmlJavaTypeAdapter")) {
+      // ^ dumb check! TODO make more elegant
+      System.out.println(fileName + " already contains relevant annotation.");
+    } else {
+      // need to add some imports:
+      if (containsEnum) {
+        data = "\nimport javax.xml.bind.annotation.XmlType;\n" + data;
+      }
+      if (containsXmlElement) {
+        data = "\nimport javax.xml.bind.annotation.XmlElement;\n" + data;
+      }
+      // Now finally write the new class definition in to the file:
+      String newContents = builder.toString().replace("public interface " + fileName,
+              data + "\n" + "public interface " + fileName);
+      builder = new StringBuilder(newContents);
+      this.writeFileData(fileInterface, newContents);
+      System.out.println("Updated " + fileInterface.getName() + " with appropriate XML annotations and import statements.");
+    }
+    /* find all enums of StringEnumAbstractBase and add annotations - each
+     * enum in the class needs a unique name; in this case, we create a
+     * prefix and append an index for each enum in the class: */
+    String patternEnum = "static final class Enum extends org.apache.xmlbeans.StringEnumAbstractBase";
+    boolean enums = false;
+    int enumCount = 0;
+    // do a 'blat' replace - all enums have same name at this point (if >1 enums):
+    builder = new StringBuilder(builder.toString().replace(patternEnum,
+            "@XmlType(name=\""
+            + FilenameUtils.removeExtension(fileInterface.getName())
+            + "Enum_IDX" + "\", namespace=\"http://openeyes.org\")\n"
+            + patternEnum));
 
-            for (Iterator<String> it = this.subInterfaces.keySet().iterator(); it.hasNext();) {
-              String subclass = it.next();
-              /* You need knowledge of which subinterfaces contain their own
-               * subinterfaces - this is performed with the -u/--sub-interfaces
-               * option. If the following condition holds, then we've got
-               * a situation where the interface depth looks something like
-               * A->B->C (in terms of inner classes); this means that new
-               * abstract binding classes must be created catering for the
-               * depth of classes:
-               */
-              if (fileName.endsWith(subclass) && this.subInterfaces.get(subclass).contains(subinterface)) {
-                prefix = fileName.substring(0, fileName.length() - "Document".length());
-                String subinterfaceImpl = prefix + "Impl." + subinterface + "Impl";
-                String abstractFileName = "XmlAdapter" + (fileName + "."
-                        + subinterfaceImpl).replace(".", "_");
-                copyStr = new StringBuilder(copyStr.toString().replace(" public interface " + subinterface,
-                        "@XmlJavaTypeAdapter(" + abstractFileName + ".class)\n"
-                        + " public interface " + subinterface));
-                subinterface = prefix + "." + subinterface;
-                System.out.println(abstractFileName + " Updating subinterface " + subinterface);
-                this.writeFileData(new File(dirIface, abstractFileName + ".java"),
-                        this.formatXmlAdapter(packageName,
-                        packageNameImpl, fileName, "." + subinterface, "." + subinterfaceImpl));
-              } else {
-                // Otherwise, it's just a standard sub-interface of the main interface
-                // - which requires a different kind of abstract binding class:
-                String abstractFileName = "XmlAdapter" + (fileName + "."
-                        + subinterface).replace(".", "_") + "Impl";
-                copyStr = new StringBuilder(copyStr.toString().replace(" public interface " + subinterface,
-                        "@XmlJavaTypeAdapter(" + abstractFileName + ".class)\n"
-                        + " public interface " + subinterface));
-                System.out.println("Updating subinterface: " + subinterface
-                        + " with XmlJavaTypeAdapter " + abstractFileName);
-                this.writeFileData(new File(dirIface, abstractFileName + ".java"),
-                        this.formatXmlAdapter(packageName,
-                        packageNameImpl, fileName, "." + subinterface, "." + subinterface + "Impl"));
-              }
-            }
+    int enumIndex = builder.toString().lastIndexOf("Enum_IDX");
+    // now perform replacements based on index:
+    while (enumIndex > -1) {
+      enums = true;
+      builder = new StringBuilder(builder.replace(enumIndex, enumIndex + "Enum_IDX".length(), "Enum_" + (enumCount++)));
+      enumIndex = builder.toString().lastIndexOf("Enum_IDX", enumIndex - 1);
+    }
+    if (enums) {
+      this.writeFileData(fileInterface, builder.toString());
+    }
+    /* EVERY interface requires an abstract class to bind the interface to
+     * a class for marshalling purposes - create the data based
+     * on the intreface name and the impl - this is the XmlJavaTypeAdapter
+     * reference in the header of the interface:
+     */
+    String abstractFileData = this.formatXmlAdapter(packageName,
+            packageNameImpl, fileName);
+    File abstractFile = new File(dirIface, abstractFilename);
+    if (!abstractFile.exists()) {
+      // create the new abstract file
+      this.writeFileData(abstractFile, abstractFileData);
+      System.out.println("[*] Creation of new file in "
+              + abstractFile.getAbsolutePath() + " succeeded");
+
+    } else {
+      System.out.println(abstractFilename + " already exists; leaving it.");
+    }
+    /* The interface XmlAnySimpleType for add/get methods barfs:
+     * So we're going to replace all occurrences of the interface
+     * with the concrete implementation:
+     */
+    builder = this.adaptXmlAnySimpleType(fileInterface, builder);
+    // Each interface /might/ have sub-interfaces - let's check to see if there are:
+    StringBuilder copyStr = new StringBuilder(builder);
+    // all sub-interfaces are not newline-based - they'll be indented with spaces:
+    final String str = " public interface ";
+    boolean updated = false;
+    int index = builder.length() - 1;
+    while ((index = copyStr.toString().lastIndexOf(str, index - 1)) > -1
+            && index > startIfacePos) {
+      if (index > -1) {
+        updated = true;
+        int spaceChar = copyStr.toString().indexOf(" ", index
+                + str.length());
+        String subinterface = copyStr.toString().substring(index
+                + str.length(), spaceChar);
+        // hack TODO need to get this to work for multiple configurations
+        String prefix = null;
+
+        for (Iterator<String> it = this.subInterfaces.keySet().iterator(); it.hasNext();) {
+          String subclass = it.next();
+          /* You need knowledge of which subinterfaces contain their own
+           * subinterfaces - this is performed with the -u/--sub-interfaces
+           * option. If the following condition holds, then we've got
+           * a situation where the interface depth looks something like
+           * A->B->C (in terms of inner classes); this means that new
+           * abstract binding classes must be created catering for the
+           * depth of classes:
+           */
+          if (fileName.endsWith(subclass) && this.subInterfaces.get(subclass).contains(subinterface)) {
+            prefix = fileName.substring(0, fileName.length() - "Document".length());
+            String subinterfaceImpl = prefix + "Impl." + subinterface + "Impl";
+            String abstractFileName = "XmlAdapter" + (fileName + "."
+                    + subinterfaceImpl).replace(".", "_");
+            copyStr = new StringBuilder(copyStr.toString().replace(" public interface " + subinterface,
+                    "@XmlJavaTypeAdapter(" + abstractFileName + ".class)\n"
+                    + " public interface " + subinterface));
+            subinterface = prefix + "." + subinterface;
+            System.out.println(abstractFileName + " Updating subinterface " + subinterface);
+            this.writeFileData(new File(dirIface, abstractFileName + ".java"),
+                    this.formatXmlAdapter(packageName,
+                    packageNameImpl, fileName, "." + subinterface, "." + subinterfaceImpl));
+          } else {
+            // Otherwise, it's just a standard sub-interface of the main interface
+            // - which requires a different kind of abstract binding class:
+            String abstractFileName = "XmlAdapter" + (fileName + "."
+                    + subinterface).replace(".", "_") + "Impl";
+            copyStr = new StringBuilder(copyStr.toString().replace(" public interface " + subinterface,
+                    "@XmlJavaTypeAdapter(" + abstractFileName + ".class)\n"
+                    + " public interface " + subinterface));
+            System.out.println("Updating subinterface: " + subinterface
+                    + " with XmlJavaTypeAdapter " + abstractFileName);
+            this.writeFileData(new File(dirIface, abstractFileName + ".java"),
+                    this.formatXmlAdapter(packageName,
+                    packageNameImpl, fileName, "." + subinterface, "." + subinterface + "Impl"));
           }
         }
-        if (updated) {
-          this.writeFileData(fileInterface, copyStr.toString());
-        }
+      }
+    }
+    if (updated) {
+      this.writeFileData(fileInterface, copyStr.toString());
+    }
   }
 
   /**
    * Write the file data out.
+   *
    * @param f the file to write to.
    * @param data the data to write to the file.
    * @throws IOException if the file could not be read or does not exist.
@@ -570,7 +571,7 @@ public class AnnotatorApp {
    * details. This method is used to create XML adapters for interfaces that
    * contain an interface that contains an interface and the child class needs
    * to be mapped to a class.
-   * 
+   *
    * @param packageName the name of the package where the interface resides.
    * @param packageNameImpl the name of the package where the implementation
    * resides.
@@ -616,7 +617,7 @@ public class AnnotatorApp {
    * Creates a new XML Adapter for the specified named interface and package
    * details. This method is used to create XML adapters for the specified
    * interface.
-   * 
+   *
    * @param packageName the name of the package where the interface resides.
    * @param packageNameImpl the name of the package where the implementation
    * resides.
@@ -648,14 +649,14 @@ public class AnnotatorApp {
   }
 
   /**
-   * 
+   *
    */
   private class JavaSourceFileFilter implements FileFilter {
 
     /**
-     * 
+     *
      * @param pathname
-     * @return 
+     * @return
      */
     public boolean accept(File pathname) {
       return pathname.getName().endsWith(".java");
